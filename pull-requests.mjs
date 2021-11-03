@@ -6,32 +6,38 @@ export default {
         const startOfDay = {hour: 10, minute: 30};
         const endOfDay = {hour: 18, minute: 30};
 
-        const timeOpened = moment(startDate).tz("America/New_York");
-        const timeClosed = moment(endDate).tz("America/New_York");
-
-        const daysToComplete = timeClosed.diff(timeOpened, 'days') + 1;
-
-        let timeToClose = 0;
-
-        // if only open for one day and after working hours
-        if (timeOpened.clone().set(endOfDay).isBefore(timeOpened)) {
-            return timeToClose
-        }
+        const timeOpened = moment(startDate).tz('America/New_York');
+        const timeEnded = moment(endDate).tz('America/New_York');
 
         // first day duration
-        timeToClose += moment.duration(timeOpened.clone().set(endOfDay).diff(timeOpened)).asMilliseconds();
+        const endOfFirstWorkingDay = timeOpened.clone().set(endOfDay);
+        const endOfFirstDay = timeEnded.isBefore(endOfFirstWorkingDay) ? timeEnded : endOfFirstWorkingDay;
+        let timeToClose = moment.duration(endOfFirstDay.diff(timeOpened)).asMinutes();
 
-        if (daysToComplete > 1) {
+        // add x day durations
+        let daysToProcess = timeEnded.diff(timeOpened.clone().startOf('day'), 'days');
+        while (daysToProcess >= 1) {
             const nextDay = timeOpened.clone().add(1, 'days');
 
-            const isClosingDay = timeClosed.format('YYYY-MM-DD') === nextDay.format('YYYY-MM-DD');
+            const isClosingDay = timeEnded.format('YYYY-MM-DD') === nextDay.format('YYYY-MM-DD');
 
-            const endOfDuration = isClosingDay ? {hour: timeClosed.hour(), minute: timeClosed.minutes()} : endOfDay;
+            const endOfDuration = isClosingDay ? {hour: timeEnded.hour(), minute: timeEnded.minutes()} : endOfDay;
 
-            timeToClose += moment.duration(nextDay.clone().set(endOfDuration).diff(nextDay.clone().set(startOfDay))).asMilliseconds();
+            const startOfNextDay = nextDay.clone().set(startOfDay)
+            const endOfNextDay = nextDay.clone().set(endOfDuration)
+
+            if (endOfNextDay.isBefore(startOfNextDay)) {
+                daysToProcess--
+
+                continue;
+            }
+
+            timeToClose += moment.duration(endOfNextDay.diff(startOfNextDay)).asMinutes();
+
+            daysToProcess--;
         }
 
-        return timeToClose / 60000; // convert ms to m
+        return timeToClose;
     },
 
     isStale: (minutes) => {
@@ -42,8 +48,8 @@ export default {
         const linesChanged = pullRequest.additions - pullRequest.deletions;
 
         const optimal = linesChanged <= 250;
-        const complex = !(optimal || veryComplex);
         const veryComplex = linesChanged >= 600;
+        const complex = !(optimal || veryComplex);
 
         if (optimal) return 'optimal';
         if (complex) return 'complex';
